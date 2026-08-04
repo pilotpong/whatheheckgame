@@ -262,15 +262,8 @@
   pasteIn.addEventListener('input',()=>{ if(pasteIn.value.trim()) applyCode(pasteIn.value); });
 
   // ---- scoring ----
-  // Correct answers translate into a penalty on the point, except at 5 and below
-  // where the round fails outright whatever the point says.
-  function penalty(c){
-    if(c<=5) return null;          // null == automatic red
-    if(c===6) return 15;
-    if(c===7) return 10;
-    if(c===8) return 5;
-    return 0;                      // 9-10
-  }
+  // The face reads J and nothing else. Correct answer is still entered and still
+  // travels with the record, but it no longer moves the score.
   function band(s){                // 1-40 red, 41-60 yellow, 61-100 green
     if(s<=40) return 'red';
     if(s<=60) return 'yellow';
@@ -299,24 +292,21 @@
   function say(el,txt,cls){ el.textContent=txt; el.className='status'+(cls?' '+cls:''); }
 
   function score(){
-    let bad=null;
-    [ID,POINT,N-1].forEach(i=>{
-      const miss=vals[i]==='';
-      rows[i].classList.toggle('miss',miss);
-      if(miss&&bad===null) bad=i;
-    });
-    if(bad!==null){ select(bad); rows[bad].classList.add('miss'); return; }
+    // J is the only field the face depends on, so it is the only one required.
+    // ID and Correct answer are recorded whether or not they were filled in.
+    const miss=vals[POINT]==='';
+    rows[POINT].classList.toggle('miss',miss);
+    if(miss){ select(POINT); rows[POINT].classList.add('miss'); return; }
 
-    const point=+vals[POINT], c=+vals[N-1], ded=penalty(c);
-    const final=ded===null?null:Math.max(0,Math.min(100,point-ded));
-    const kind=ded===null?'red':band(final);
+    const point=+vals[POINT];
+    const kind=band(point);
 
     // The raw record: everything entered, plus what the rules made of it. The ID
     // travels as text so a leading zero survives into the spreadsheet.
     last={ts:new Date().toISOString(), id:vals[ID],
            cells:vals.slice(FIRST,FIRST+12).map(v=>v===''?'':+v),
-           correct:c, deduction:ded===null?'':ded,
-           score:ded===null?'':final, result:kind};
+           correct:vals[N-1]===''?'':+vals[N-1],
+           score:point, result:kind};
 
     drawFace(kind);
     resEl.classList.remove('hidden');
@@ -327,7 +317,7 @@
   // ---- taking the record off the device ----
   // One tab-separated line: everything entered plus what the rules made of it,
   // which pastes straight across a row of cells in a spreadsheet.
-  const rowOf=r=>[r.ts,r.id].concat(r.cells,[r.correct,r.deduction,r.score,r.result]);
+  const rowOf=r=>[r.ts,r.id].concat(r.cells,[r.correct,r.score,r.result]);
 
   document.getElementById('copyBtn').addEventListener('click',()=>{
     if(!last) return;
