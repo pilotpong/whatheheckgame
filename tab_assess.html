@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>TAP — Assessment</title>
+<style>
+  :root{
+    --bg:#f6f6f6; --panel:#ffffff; --line:#d8d8d8;
+    --ink:#1b2622; --ink-dim:#71807a;
+    --go:#0f9d58; --warn:#e0a800; --err:#c62828;
+    --padh:270px;                 /* room kept clear under the form for the keypad */
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;min-height:100%;background:var(--bg);
+    font-family:"DejaVu Sans Mono","Courier New",monospace;color:var(--ink);
+    -webkit-text-size-adjust:100%;user-select:none;-webkit-user-select:none;}
+  .hidden{display:none !important;}
+  #wrap{max-width:420px;margin:0 auto;padding:24px 18px calc(var(--padh) + 30px);}
+  .logo{font-size:40px;font-weight:bold;letter-spacing:10px;text-align:center;margin:0 0 6px;}
+  .tag{font-size:11px;letter-spacing:4px;color:var(--ink-dim);text-transform:uppercase;
+    text-align:center;margin-bottom:22px;}
+
+  /* Taking the round off the clipboard beats keying twelve numbers back in. */
+  .paste{text-align:center;margin-bottom:18px;}
+  .paste input{font-family:inherit;font-size:13px;text-align:center;width:100%;margin-top:10px;
+    padding:12px;border:1px solid var(--line);border-radius:5px;background:var(--panel);
+    user-select:text;-webkit-user-select:text;}
+  .paste input:focus{outline:none;border-color:var(--go);}
+  .paste .status{margin-top:8px;}
+  .row.filled{animation:lit 1.2s ease-out;}
+  @keyframes lit{from{background:#dff0e7}to{background:transparent}}
+
+  /* One column, one field per line, in the order the card prints it. The whole row
+     is the target -- on a tablet nobody should have to hit the box itself. */
+  .form{display:grid;grid-template-columns:1fr;gap:4px;}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:12px;
+    border-bottom:1px solid #ececec;padding:6px 8px;border-radius:5px;cursor:pointer;}
+  .row.last{border-bottom:none;margin-top:12px;padding-top:12px;border-top:2px solid var(--line);}
+  .row.sel{background:#e9f2ee;box-shadow:inset 3px 0 0 var(--go);}
+  .rk{font-size:12px;letter-spacing:2px;color:var(--ink-dim);text-transform:uppercase;}
+  .row.last .rk,.row.idrow .rk{color:var(--ink);font-weight:bold;}
+  .rv{font-size:22px;font-weight:bold;text-align:right;min-width:110px;
+    background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:10px 12px;}
+  .row.sel .rv{border-color:var(--go);}
+  .rv:empty::after{content:'\00a0';}                 /* keep the box open when blank */
+  .row.miss .rv,.row.miss input{border-color:var(--err);background:#fff5f5;}
+  /* The caret marks which field the keypad is typing into. */
+  .row.sel .rv::after{content:'';display:inline-block;width:2px;height:20px;
+    background:var(--go);margin-left:3px;vertical-align:-3px;animation:blink 1s step-end infinite;}
+  @keyframes blink{50%{opacity:0}}
+
+  /* The ID heads the column, ruled off from the readings below it. */
+  .row.idrow{border-bottom:2px solid var(--line);padding-bottom:12px;margin-bottom:10px;}
+
+  /* Keypad: fixed to the bottom, thumb-sized keys, always in the same place so
+     entry becomes muscle memory rather than aiming. */
+  #pad{position:fixed;left:0;right:0;bottom:0;background:var(--panel);
+    border-top:1px solid var(--line);padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+    z-index:10;}
+  .padgrid{max-width:420px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .key{font-family:inherit;font-size:26px;font-weight:bold;color:var(--ink);
+    background:var(--bg);border:1px solid var(--line);border-radius:7px;
+    padding:14px 0;cursor:pointer;touch-action:manipulation;}
+  .key:active{background:#dfe6e2;}
+  .key.act{font-size:15px;letter-spacing:2px;text-transform:uppercase;}
+  .key.next{background:var(--panel);}
+  .key.go{background:var(--go);color:#fff;border-color:var(--go);}
+  .key.go:active{background:#0b7f46;}
+
+  .cardbtns{display:flex;flex-direction:column;gap:10px;align-items:center;margin-top:20px;}
+  button.btn{font-family:inherit;font-size:12px;letter-spacing:1px;text-transform:uppercase;
+    background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:5px;
+    padding:12px 22px;cursor:pointer;}
+  button.btn:active{background:#e3e9e6;}
+  button.btn.prime{background:var(--go);color:#fff;border-color:var(--go);}
+  button.btn:disabled{opacity:.45;}
+
+  /* The verdict is a face and nothing else -- no number, no wording. */
+  #result{position:fixed;inset:0;z-index:20;background:var(--bg);overflow-y:auto;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;
+    padding:24px;}
+  #face{width:min(230px,55vw);height:min(230px,55vw);display:block;}
+  .status{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ink-dim);
+    min-height:14px;text-align:center;}
+  .status.ok{color:var(--go);} .status.warn{color:var(--warn);} .status.err{color:var(--err);}
+
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1 class="logo">TAP</h1>
+  <div class="tag">Assessment</div>
+
+  <div class="paste">
+    <button class="btn" id="pasteBtn">Paste round</button>
+    <input type="text" id="pasteIn" class="hidden" placeholder="Long-press here, then Paste"
+           autocapitalize="off" autocorrect="off" spellcheck="false">
+    <div class="status" id="pasteStatus"></div>
+  </div>
+
+  <div class="form" id="form"></div>
+
+</div>
+
+<div id="pad">
+  <div class="padgrid" id="padgrid"></div>
+</div>
+
+<div id="result" class="hidden">
+  <svg id="face" viewBox="0 0 100 100" aria-hidden="true"></svg>
+  <div class="status" id="copyStatus"></div>
+  <div class="cardbtns">
+    <button class="btn" id="copyBtn">Copy row</button>
+    <button class="btn" id="backBtn">Back</button>
+    <button class="btn" id="clearBtn">New sheet</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  // The ID is row 0 and the keypad fills it like any other, so the whole sheet is
+  // one walk down the column with no system keyboard anywhere in it.
+  const KEYS='ABCDEFGHIJKL'.split('');
+  const ID=0, FIRST=1;             // ID row, then A..L from index 1
+  const POINT=10;                  // index of J -- the card entry the score is built from
+  const LABELS=['Interview ID'].concat(KEYS,['Correct answer']);
+  const N=LABELS.length;
+  const CAP=i=>i===ID?8:4;         // digits allowed: an ID can run longer than a reading
+  const vals=new Array(N).fill('');
+  let sel=0, last=null;            // last = the scored record, ready to copy out
+
+  // ---- sheet ----
+  const form=document.getElementById('form');
+  const rows=LABELS.map((lab,i)=>{
+    const r=document.createElement('div');
+    r.className='row'+(i===ID?' idrow':'')+(i===N-1?' last':'');
+    r.innerHTML='<span class="rk">'+lab+'</span><span class="rv"></span>';
+    r.addEventListener('click',()=>select(i));
+    form.appendChild(r);
+    return r;
+  });
+  const valEl=i=>rows[i].querySelector('.rv');
+
+  function draw(i){ valEl(i).textContent=vals[i]; }
+  function select(i){
+    sel=(i+N)%N;
+    rows.forEach((r,j)=>r.classList.toggle('sel',j===sel));
+    rows[sel].classList.remove('miss');
+    hideResult(); syncNext();
+    rows[sel].scrollIntoView({block:'center',behavior:'smooth'});
+  }
+
+  // ---- keypad ----
+  // Digits fill the selected field; NEXT walks down the column and scores off the
+  // last row, so a whole sheet is 14 numbers and 14 taps of NEXT.
+  const PAD=[['1','1'],['2','2'],['3','3'],['4','4'],['5','5'],['6','6'],
+             ['7','7'],['8','8'],['9','9'],
+             ['del','Del'],['0','0'],['next','Next']];
+  const grid=document.getElementById('padgrid');
+  PAD.forEach(([k,label])=>{
+    const b=document.createElement('button');
+    b.className='key'+(k==='next'?' act next':'')+(k==='del'?' act':'');
+    b.textContent=label;
+    b.addEventListener('click',()=>press(k));
+    grid.appendChild(b);
+  });
+  const nextKey=grid.lastChild;
+
+  function press(k){
+    if(k==='next'){
+      if(sel===N-1) score(); else select(sel+1);
+      return;
+    }
+    hideResult();
+    // Four digits for a reading, since a median RT sits just under the 1000 ms
+    // timeout. The ID keeps any leading zero it is given -- 007 is an ID, not 7.
+    if(k==='del') vals[sel]=vals[sel].slice(0,-1);
+    else if(vals[sel].length<CAP(sel))
+      vals[sel]=(sel!==ID&&vals[sel]==='0'?'':vals[sel])+k;
+    rows[sel].classList.remove('miss');
+    draw(sel);
+    syncNext();
+  }
+  // The last row's NEXT is the Score key, and says so.
+  function syncNext(){
+    const on=sel===N-1;
+    nextKey.textContent=on?'Score':'Next';
+    nextKey.classList.toggle('go',on);
+  }
+  // A paired Bluetooth keyboard still works: digits, backspace, Enter, arrows.
+  // The paste box keeps its own typing.
+  document.addEventListener('keydown',e=>{
+    const t=document.activeElement;
+    if(t&&(t.tagName==='INPUT')) return;
+    if(e.key>='0'&&e.key<='9') press(e.key);
+    else if(e.key==='Backspace') press('del');
+    else if(e.key==='Enter') press('next');
+    else if(e.key==='ArrowDown') select(sel+1);
+    else if(e.key==='ArrowUp') select(sel-1);
+    else return;
+    e.preventDefault();
+  });
+
+  // ---- round code ----
+  // What the game's report card copies out: TAP1 plus the twelve values in A..L
+  // order, blanks allowed. Everything else on the clipboard is rejected rather
+  // than half-read, since a silent wrong fill is worse than no fill.
+  const pasteBtn=document.getElementById('pasteBtn'),
+        pasteIn=document.getElementById('pasteIn'),
+        pasteStatus=document.getElementById('pasteStatus');
+  let armedPaste=false;
+
+  function parseCode(txt){
+    // Split on commas alone and keep the empty fields: a blank value is a real
+    // reading ("no responses to take a median of"), and collapsing runs of commas
+    // would silently shift every later value one letter to the left.
+    const parts=String(txt).trim().split(',').map(s=>s.trim());
+    if(!parts.length) return null;
+    if(parts[0].toUpperCase()==='TAP1') parts.shift(); else return null;
+    if(parts.length!==12) return null;
+    if(!parts.every(p=>p===''||p==='-'||p==='—'||/^\d{1,4}$/.test(p))) return null;
+    return parts.map(p=>(p==='-'||p==='—')?'':p);
+  }
+
+  function applyCode(txt){
+    const got=parseCode(txt);
+    if(!got){ say(pasteStatus,'Not a round code','err'); return false; }
+    // Overwriting entered values is the one destructive thing here, so it asks.
+    // The ID is not part of the code and is never touched by a paste.
+    if(!armedPaste && vals.slice(FIRST,FIRST+12).some(v=>v!=='')){
+      armedPaste=true;
+      pasteBtn.textContent='Replace values?';
+      say(pasteStatus,'A-L already filled','warn');
+      return false;
+    }
+    got.forEach((v,n)=>{ const i=FIRST+n; vals[i]=v; draw(i);
+      rows[i].classList.remove('miss','filled');
+      void rows[i].offsetWidth; rows[i].classList.add('filled'); });
+    resetPaste();
+    say(pasteStatus,'Round pasted','ok');
+    hidePasteBox();
+    select(N-1);                     // the count is the one thing left to type
+    return true;
+  }
+  function resetPaste(){ armedPaste=false; pasteBtn.textContent='Paste round'; }
+  function hidePasteBox(){ pasteIn.value=''; pasteIn.classList.add('hidden'); }
+
+  pasteBtn.addEventListener('click',()=>{
+    if(navigator.clipboard&&navigator.clipboard.readText){
+      navigator.clipboard.readText().then(applyCode,showBox);
+    } else showBox();
+  });
+  // iOS can refuse the clipboard read outright; then the code is pasted by hand
+  // into a box, which parses as soon as anything lands in it.
+  function showBox(){
+    pasteIn.classList.remove('hidden');
+    say(pasteStatus,'Paste the code below');
+    pasteIn.focus();
+  }
+  pasteIn.addEventListener('input',()=>{ if(pasteIn.value.trim()) applyCode(pasteIn.value); });
+
+  // ---- scoring ----
+  // Correct answers translate into a penalty on the point, except at 5 and below
+  // where the round fails outright whatever the point says.
+  function penalty(c){
+    if(c<=5) return null;          // null == automatic red
+    if(c===6) return 15;
+    if(c===7) return 10;
+    if(c===8) return 5;
+    return 0;                      // 9-10
+  }
+  function band(s){                // 1-40 red, 41-60 yellow, 61-100 green
+    if(s<=40) return 'red';
+    if(s<=60) return 'yellow';
+    return 'green';
+  }
+
+  const COL={red:'#c62828',yellow:'#e0a800',green:'#0f9d58'};
+  const MOUTH={
+    red:'M 30 72 Q 50 54 70 72',       // frowning
+    yellow:'M 31 68 L 69 68',          // straight
+    green:'M 30 60 Q 50 78 70 60'      // smiling
+  };
+  function drawFace(kind){
+    document.getElementById('face').innerHTML=
+      '<circle cx="50" cy="50" r="46" fill="'+COL[kind]+'"/>'+
+      '<circle cx="35" cy="38" r="6" fill="#ffffff"/>'+
+      '<circle cx="65" cy="38" r="6" fill="#ffffff"/>'+
+      '<path d="'+MOUTH[kind]+'" fill="none" stroke="#ffffff" '+
+        'stroke-width="7" stroke-linecap="round"/>';
+  }
+
+  const resEl=document.getElementById('result');
+  const padEl=document.getElementById('pad');
+  const copyStatus=document.getElementById('copyStatus');
+  function hideResult(){ resEl.classList.add('hidden'); padEl.classList.remove('hidden'); }
+  function say(el,txt,cls){ el.textContent=txt; el.className='status'+(cls?' '+cls:''); }
+
+  function score(){
+    let bad=null;
+    [ID,POINT,N-1].forEach(i=>{
+      const miss=vals[i]==='';
+      rows[i].classList.toggle('miss',miss);
+      if(miss&&bad===null) bad=i;
+    });
+    if(bad!==null){ select(bad); rows[bad].classList.add('miss'); return; }
+
+    const point=+vals[POINT], c=+vals[N-1], ded=penalty(c);
+    const final=ded===null?null:Math.max(0,Math.min(100,point-ded));
+    const kind=ded===null?'red':band(final);
+
+    // The raw record: everything entered, plus what the rules made of it. The ID
+    // travels as text so a leading zero survives into the spreadsheet.
+    last={ts:new Date().toISOString(), id:vals[ID],
+           cells:vals.slice(FIRST,FIRST+12).map(v=>v===''?'':+v),
+           correct:c, deduction:ded===null?'':ded,
+           score:ded===null?'':final, result:kind};
+
+    drawFace(kind);
+    resEl.classList.remove('hidden');
+    padEl.classList.add('hidden');
+    say(copyStatus,'');
+  }
+
+  // ---- taking the record off the device ----
+  // One tab-separated line: everything entered plus what the rules made of it,
+  // which pastes straight across a row of cells in a spreadsheet.
+  const rowOf=r=>[r.ts,r.id].concat(r.cells,[r.correct,r.deduction,r.score,r.result]);
+
+  document.getElementById('copyBtn').addEventListener('click',()=>{
+    if(!last) return;
+    const txt=rowOf(last).join('\t');
+    const done=()=>say(copyStatus,'Row copied','ok');
+    if(navigator.clipboard&&navigator.clipboard.writeText)
+      navigator.clipboard.writeText(txt).then(done,fallback);
+    else fallback();
+    function fallback(){
+      const ta=document.createElement('textarea');
+      ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.select();
+      try{ document.execCommand('copy'); done(); }catch(e){ say(copyStatus,'Copy failed','err'); }
+      ta.remove();
+    }
+  });
+
+  document.getElementById('backBtn').addEventListener('click',()=>{ hideResult(); select(sel); });
+
+  document.getElementById('clearBtn').addEventListener('click',()=>{
+    last=null;
+    vals.fill('');
+    rows.forEach((r,i)=>{ r.classList.remove('miss','filled'); draw(i); });
+    hideResult(); say(copyStatus,'');
+    resetPaste(); hidePasteBox(); say(pasteStatus,'');
+    select(ID);
+    window.scrollTo(0,0);
+  });
+
+  select(ID); syncNext();
+})();
+</script>
+</body>
+</html>
