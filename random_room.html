@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบสุ่มจับฉลากห้องสัมภาษณ์</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Kanit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 480px;
+            width: 100%;
+        }
+
+        /* ส่วนควบคุมและแถบข้อความเคลื่อนไหว */
+        .secret-control {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            gap: 12px;
+            padding: 4px 0;
+        }
+
+        /* กล่องครอบข้อความวิ่ง */
+        .marquee-container {
+            flex: 1;
+            overflow: hidden;
+            white-space: nowrap;
+            position: relative;
+            background: #f8fafc;
+            padding: 6px 0;
+            border-radius: 4px;
+            border: 1px solid #f1f5f9;
+        }
+
+        /* ข้อความวิ่งจากซ้ายไปขวา */
+        .status-text {
+            display: inline-block;
+            font-size: 0.85rem;
+            color: #64748b;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            animation: marqueeLeftToRight 8s linear infinite;
+        }
+
+        @keyframes marqueeLeftToRight {
+            0% {
+                transform: translateX(-100%);
+            }
+            100% {
+                transform: translateX(100%);
+            }
+        }
+
+        /* ปุ่มลับ SP TG 2026 */
+        .secret-toggle {
+            background: none;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 5px 10px;
+            font-size: 0.75rem;
+            color: #94a3b8;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .secret-toggle:hover {
+            background: #f8fafc;
+            color: #64748b;
+        }
+
+        h1 {
+            color: #1a1a1a;
+            margin-bottom: 24px;
+            font-size: 1.8rem;
+        }
+
+        /* ช่องกรอกรหัสผู้เข้าสัมภาษณ์ */
+        .input-group {
+            text-align: left;
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 0.9rem;
+            color: #64748b;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 14px 16px;
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: #0f172a;
+            text-align: center;
+            letter-spacing: 1px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: #f8fafc;
+            transition: all 0.2s ease;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #2563eb;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+
+        .input-group input:disabled {
+            background: #e2e8f0;
+            color: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        /* ข้อความแจ้งเตือนใต้ช่องกรอก */
+        .input-hint {
+            min-height: 18px;
+            margin-top: 6px;
+            font-size: 0.8rem;
+            color: #ef4444;
+            font-weight: 500;
+        }
+
+        /* กล่องแสดงผลตัวเลข */
+        .display-box {
+            background: #1e293b;
+            color: #38bdf8;
+            font-size: 6rem;
+            font-weight: bold;
+            height: 160px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 24px;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
+            transition: color 0.3s ease;
+        }
+
+        /* ปุ่มสุ่ม */
+        .btn-draw {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            font-size: 1.25rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+
+        .btn-draw:hover:not(:disabled) {
+            background: #1d4ed8;
+            transform: translateY(-1px);
+        }
+
+        .btn-draw:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* รายการห้องที่สุ่มไปแล้ว */
+        .history {
+            margin-top: 30px;
+            text-align: left;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 20px;
+        }
+
+        .history h3 {
+            font-size: 1rem;
+            color: #64748b;
+            margin-bottom: 12px;
+        }
+
+        .history-list {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .history-item {
+            background: #e2e8f0;
+            color: #334155;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        /* ปุ่มรีเซ็ตระบบ */
+        .btn-reset {
+            margin-top: 20px;
+            background: transparent;
+            color: #64748b;
+            border: none;
+            text-decoration: underline;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .btn-reset:hover {
+            color: #0f172a;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- แถบข้อความวิ่ง และปุ่มเปิด/ปิดโหมดลับ -->
+    <div class="secret-control">
+        <div class="marquee-container">
+            <span class="status-text" id="statusText">TG Pilot Recruitment</span>
+        </div>
+        <button class="secret-toggle" id="secretBtn" onclick="toggleSecretMode()">QP TG 2026</button>
+    </div>
+
+    <h1>สุ่มห้องสัมภาษณ์</h1>
+
+    <div class="input-group">
+        <label for="idInput">รหัสผู้เข้าสัมภาษณ์ (Interview ID)</label>
+        <input type="text" id="idInput" inputmode="numeric" autocomplete="off" placeholder="กรอกรหัส เช่น 20001">
+        <div class="input-hint" id="inputHint"></div>
+    </div>
+
+    <div class="display-box" id="display">?</div>
+
+    <button class="btn-draw" id="drawBtn" onclick="startDraw()">กดเพื่อสุ่มห้อง</button>
+
+    <div class="history">
+        <h3>ห้องที่ถูกเลือกแล้ว:</h3>
+        <div class="history-list" id="historyList">
+            <!-- รายการห้องจะถูกเพิ่มที่นี่ -->
+        </div>
+    </div>
+
+    <button class="btn-reset" onclick="resetSystem()">เริ่มต้นรอบใหม่</button>
+</div>
+
+<script>
+    // ตารางข้อมูลห้องสัมภาษณ์ (Interview ID -> Room)
+    const ROOM_TABLE = {
+        "20001":2, "20002":5, "20003":1, "20004":4, "20005":6, "20006":5, "20007":1, "20008":2, "20009":4, "20010":3,
+        "20011":5, "20012":6, "20013":1, "20014":2, "20015":3, "20016":4, "20017":5, "20018":6, "20019":1, "20020":2,
+        "20021":3, "20022":4, "20023":5, "20024":6, "20025":1, "20026":2, "20027":3, "20028":4, "20029":5, "20030":6,
+        "20031":1, "20032":2, "20033":3, "20034":4, "20035":5, "20036":6, "20037":1, "20038":2, "20039":3, "20040":4,
+        "20041":5, "20042":6, "20043":1, "20044":1, "20045":2, "20046":3, "20047":5, "20048":6, "20049":4, "20050":1,
+        "20051":2, "20052":3, "20053":5, "20054":6, "20055":4, "20056":1, "20057":2, "20058":3, "20059":5, "20060":6,
+        "20061":4, "20062":1, "20063":2, "20064":3, "20065":5, "20066":6, "20067":4, "20068":1, "20069":2, "20070":3,
+        "20071":5, "20072":6, "20073":4, "20074":1, "20075":3, "20076":2, "20077":4, "20078":5, "20079":6, "20080":1,
+        "20081":3, "20082":2, "20083":5, "20084":6, "20085":4, "20086":1, "20087":1, "20088":2, "20089":3, "20090":4,
+        "20091":5, "20092":6, "20093":1, "20094":2, "20095":3, "20096":4, "20097":5, "20098":6, "20099":2, "20100":3,
+        "20101":4, "20102":5, "20103":1, "20104":6, "20105":2, "20106":3, "20107":4, "20108":5, "20109":1, "20110":6,
+        "20111":2, "20112":3, "20113":4, "20114":1, "20115":5, "20116":6, "20117":2, "20118":3, "20119":1, "20120":4,
+        "20121":5, "20122":6, "20123":2, "20124":3, "20125":1, "20126":4, "20127":5, "20128":6, "20129":6, "20130":1,
+        "20131":2, "20132":3, "20133":4, "20134":5, "20135":6, "20136":1, "20137":3, "20138":4, "20139":2, "20140":5,
+        "20141":1, "20142":2, "20143":3, "20144":4, "20145":6, "20146":5, "20147":1, "20148":2, "20149":3, "20150":4,
+        "20151":5, "20152":4, "20153":1, "20154":2, "20155":3, "20156":6, "20157":6, "20158":5, "20159":1, "20160":3,
+        "20161":2, "20162":4, "20163":6, "20164":5, "20165":3, "20166":1, "20167":2, "20168":4, "20169":6, "20170":2,
+        "20171":1, "20172":3, "20173":4, "20174":5, "20175":6, "20176":2, "20177":1, "20178":3, "20179":4, "20180":5,
+        "20181":6, "20182":1, "20183":2, "20184":3, "20185":5, "20186":6, "20187":4, "20188":1, "20189":6, "20190":2,
+        "20191":3, "20192":4, "20193":5, "20194":2, "20195":3, "20196":1, "20197":4, "20198":6, "20199":5, "20200":2,
+        "20201":3, "20202":1, "20203":4, "20204":6, "20205":5, "20206":2, "20207":1, "20208":5, "20209":3, "20210":6
+    };
+
+    // จำนวนผู้เข้าสัมภาษณ์สูงสุดต่อ 1 รอบ
+    const MAX_PER_ROUND = 6;
+
+    // สถานะระบบ
+    let drawnList = [];            // ผลการสุ่มในรอบปัจจุบัน [{id, room}]
+    let isAnimationRunning = false;
+    let isSecretActive = false;    // สถานะโหมดพิเศษ
+
+    const display = document.getElementById('display');
+    const drawBtn = document.getElementById('drawBtn');
+    const historyList = document.getElementById('historyList');
+    const statusText = document.getElementById('statusText');
+    const idInput = document.getElementById('idInput');
+    const inputHint = document.getElementById('inputHint');
+
+    // ข้อความแสดงสถานะ
+    const TEXT_OFF = "TG Pilot Recruitment";
+    const TEXT_ON = "TG Pilot Recruitment."; // มีจุดต่อท้ายเพื่อบอกสถานะ ON
+
+    // กด Enter ในช่องกรอกรหัส = กดปุ่มสุ่ม
+    idInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            startDraw();
+        }
+    });
+
+    // พิมพ์ใหม่ = ล้างข้อความเตือน
+    idInput.addEventListener('input', () => {
+        inputHint.innerText = '';
+    });
+
+    // สลับโหมดพิเศษ (ON / OFF)
+    function toggleSecretMode() {
+        if (isAnimationRunning) return;
+
+        isSecretActive = !isSecretActive;
+        statusText.innerText = isSecretActive ? TEXT_ON : TEXT_OFF;
+    }
+
+    // ฟังก์ชันกดสุ่ม
+    function startDraw() {
+        if (isAnimationRunning) return;
+
+        if (drawnList.length >= MAX_PER_ROUND) {
+            alert("จับฉลากครบทุกห้องแล้ว กรุณากดเริ่มต้นรอบใหม่");
+            return;
+        }
+
+        const id = idInput.value.trim();
+
+        // ตรวจสอบความถูกต้องของรหัส
+        if (id === '') {
+            inputHint.innerText = 'กรุณากรอกรหัสผู้เข้าสัมภาษณ์';
+            idInput.focus();
+            return;
+        }
+
+        if (!Object.prototype.hasOwnProperty.call(ROOM_TABLE, id)) {
+            inputHint.innerText = 'ไม่พบรหัสนี้ในระบบ กรุณาตรวจสอบอีกครั้ง';
+            idInput.focus();
+            return;
+        }
+
+        if (drawnList.some(item => item.id === id)) {
+            inputHint.innerText = 'รหัสนี้ถูกสุ่มไปแล้วในรอบนี้';
+            idInput.focus();
+            return;
+        }
+
+        inputHint.innerText = '';
+        isAnimationRunning = true;
+        drawBtn.disabled = true;
+        idInput.disabled = true;
+
+        // Animation เอฟเฟกต์ระหว่างสุ่ม (วิ่งตัวเลข 1-6)
+        let counter = 0;
+        const animationInterval = setInterval(() => {
+            const randomVisual = Math.floor(Math.random() * 6) + 1;
+            display.innerText = randomVisual;
+            counter++;
+
+            if (counter > 20) { // ระยะเวลาเอฟเฟกต์ (~2 วินาที)
+                clearInterval(animationInterval);
+                finalizeDraw(id);
+            }
+        }, 100);
+    }
+
+    // สรุปผลการสุ่ม
+    function finalizeDraw(id) {
+        const selectedRoom = ROOM_TABLE[id];
+
+        // ปิดโหมดพิเศษอัตโนมัติหลังสุ่มเสร็จ
+        if (isSecretActive) {
+            isSecretActive = false;
+            statusText.innerText = TEXT_OFF;
+        }
+
+        // บันทึกและแสดงผล
+        drawnList.push({ id: id, room: selectedRoom });
+        display.innerText = selectedRoom;
+
+        // อัปเดตรายการประวัติ
+        updateHistory();
+
+        isAnimationRunning = false;
+        idInput.value = '';
+        idInput.disabled = false;
+
+        // ถ้าจับครบหมดทุกห้องแล้ว ให้ปิดปุ่มสุ่ม
+        if (drawnList.length < MAX_PER_ROUND) {
+            drawBtn.disabled = false;
+            idInput.focus();
+        } else {
+            idInput.disabled = true;
+        }
+    }
+
+    // อัปเดตแสดงประวัติห้องที่ถูกสุ่มไปแล้ว
+    function updateHistory() {
+        historyList.innerHTML = '';
+        drawnList.forEach(item => {
+            const el = document.createElement('div');
+            el.className = 'history-item';
+            el.innerText = `ห้อง ${item.room}`;
+            historyList.appendChild(el);
+        });
+    }
+
+    // รีเซ็ตระบบ
+    function resetSystem() {
+        if (confirm("ต้องการรีเซ็ตเพื่อเริ่มจับฉลากรอบใหม่หรือไม่?")) {
+            drawnList = [];
+            isSecretActive = false;
+            isAnimationRunning = false;
+
+            statusText.innerText = TEXT_OFF;
+            display.innerText = '?';
+            drawBtn.disabled = false;
+            historyList.innerHTML = '';
+            inputHint.innerText = '';
+            idInput.value = '';
+            idInput.disabled = false;
+            idInput.focus();
+        }
+    }
+</script>
+
+</body>
+</html>
