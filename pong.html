@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>PONG</title>
+<style>
+  :root{
+    --bg:#E9EFF8;
+    --bgTop:#FFFFFF;
+    --panel:#FFFFFF;
+    --frame:#C7D5E8;
+    --accent:#1B5FBF;
+    --aqua:#0E7C6B;
+    --danger:#C43B57;
+    --magenta:#6D4BC4;
+    --text:#1E2A3D;
+    --muted:#6C7C93;
+    --field:#FAFCFF;
+    --padOn:#E7F0FD;
+    --btnActive:#E6EDF7;
+    --goBorder:#A9C8EE;
+    --fillA:rgba(27,95,191,.22);
+    --fillB:rgba(27,95,191,.06);
+    --shadow:0 1px 2px rgba(20,40,80,.06);
+    --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+  body{
+    background:radial-gradient(120% 90% at 50% -10%, var(--bgTop) 0%, var(--bg) 65%);
+    color:var(--text);
+    font-family:var(--mono);
+    -webkit-font-smoothing:antialiased;
+    -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:none;
+  }
+  .machine{
+    height:100dvh;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  /* ---- top bar: title + system buttons ---- */
+  .topbar{display:flex;align-items:center;gap:12px;flex-shrink:0}
+  .sysbtns{margin-left:auto;display:flex;gap:8px}
+  .sysbtn{
+    font-family:var(--mono);
+    font-size:13px;letter-spacing:.12em;font-weight:600;
+    color:var(--text);
+    background:var(--panel);
+    border:1px solid var(--frame);
+    border-radius:8px;
+    padding:11px 20px;
+    min-height:46px;
+    cursor:pointer;
+    touch-action:none;
+  }
+  .sysbtn:active{background:var(--btnActive)}
+  .sysbtn.go{color:var(--accent);border-color:var(--goBorder)}
+  .sysbtn.reset{color:var(--muted)}
+  .sysbtn.copy{color:var(--accent);border-color:var(--goBorder)}
+  .sysbtn[hidden]{display:none}
+
+  /* ---- HUD ---- */
+  .hud{display:flex;gap:8px;flex-shrink:0}
+  .readout{
+    flex:1;min-width:0;
+    background:var(--panel);
+    border:1px solid var(--frame);
+    border-radius:6px;
+    padding:6px 10px;
+    box-shadow:var(--shadow);
+  }
+  .readout .label{
+    font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);
+  }
+  .readout .value{
+    font-size:22px;font-weight:700;line-height:1.15;margin-top:1px;
+    font-variant-numeric:tabular-nums;
+  }
+  .readout.returns .value{color:var(--aqua)}
+  .readout.misses  .value{color:var(--danger)}
+  .readout.reds    .value{color:var(--magenta)}
+  .readout.time    .value{color:var(--text)}
+
+  /* ---- arena: left pad | screen | right pad ---- */
+  .arena{
+    flex:1;min-height:0;
+    display:flex;align-items:stretch;gap:10px;
+  }
+  .screen-wrap{
+    flex:1;min-width:0;
+    background:var(--panel);
+    border:1px solid var(--frame);
+    border-radius:10px;
+    padding:8px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  canvas{
+    display:block;
+    width:100%;height:100%;
+    border-radius:6px;
+    background:var(--field);
+    touch-action:none;
+  }
+
+  /* ---- the two control pads ---- */
+  .pad{
+    flex:0 0 clamp(96px, 15vw, 168px);
+    background:var(--panel);
+    border:1px solid var(--frame);
+    border-radius:12px;
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    gap:6px;
+    cursor:pointer;
+    touch-action:none;
+    transition:background .06s, border-color .06s;
+    position:relative;
+    overflow:hidden;
+  }
+  .pad .arrow{font-size:34px;line-height:1;color:var(--text)}
+  .pad .who{
+    font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);
+  }
+  .pad .does{
+    font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    font-weight:700;color:var(--accent);
+  }
+  .pad.on{background:var(--padOn);border-color:var(--accent)}
+  /* While the round is live the mapping hints come off the pads - the candidate
+     should be holding the off-axis mapping themselves, not reading it. Hidden by
+     visibility, not display, so the arrows don't shift as they go. */
+  body.playing .pad .who,
+  body.playing .pad .does{visibility:hidden}
+  .pad.on .arrow{color:var(--accent)}
+  /* accel fill: rises as you hold, showing the paddle winding up */
+  .pad .fill{
+    position:absolute;left:0;right:0;bottom:0;height:0;
+    background:linear-gradient(180deg, var(--fillA), var(--fillB));
+    pointer-events:none;
+  }
+
+  @media (max-height:520px){
+    .readout .value{font-size:17px}
+    .pad .arrow{font-size:26px}
+  }
+</style>
+</head>
+<body>
+  <div class="machine">
+    <div class="topbar">
+      <div class="sysbtns">
+        <button id="copyBtn" class="sysbtn copy" hidden>COPY RESULT</button>
+        <button id="startStop" class="sysbtn go">START</button>
+        <button id="resetBtn" class="sysbtn reset">RESET</button>
+      </div>
+    </div>
+
+    <div class="hud">
+      <div class="readout returns"><div class="label">Returns</div><div class="value" id="returns">0</div></div>
+      <div class="readout misses"><div class="label">Misses</div><div class="value" id="misses">0</div></div>
+      <div class="readout reds"><div class="label">Red hits</div><div class="value" id="reds">0</div></div>
+      <div class="readout time"><div class="label">Time</div><div class="value" id="time">0:00</div></div>
+    </div>
+
+    <div class="arena">
+      <div class="pad" id="padLeft">
+        <div class="fill" id="fillLeft"></div>
+        <div class="arrow">◀</div>
+        <div class="who">Left</div>
+        <div class="does">Paddle Down</div>
+      </div>
+
+      <div class="screen-wrap">
+        <canvas id="game"></canvas>
+      </div>
+
+      <div class="pad" id="padRight">
+        <div class="fill" id="fillRight"></div>
+        <div class="arrow">▶</div>
+        <div class="who">Right</div>
+        <div class="does">Paddle Up</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  "use strict";
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+
+  // ---- canvas palette (Blueprint) ------------------------------------
+  // The CSS chrome is themed by the variables in :root; these are the same
+  // colours for the parts drawn onto the canvas.
+  const T = {
+    accent:     "#1B5FBF",              // walls + paddle
+    accentSoft: "#9EC0EA",              // corner ticks
+    ret:        "#0E7C6B",              // returnable ball
+    red:        "#C43B57",              // red balls + right wall
+    grid:       "rgba(27,95,191,0.10)",
+    paddleHi:   "rgba(255,255,255,0.50)",
+    overlay:    "rgba(248,251,255,0.82)",
+    overlaySub: "#55637A"
+  };
+
+  // ---- logical field geometry ----
+  const W = 760, H = 480;
+  const fieldLeft = 24, fieldTop = 24, fieldBottom = 456, fieldRight = 712;
+  const paddleW = 14, paddleH = 92;
+  const plane = fieldRight - paddleW;   // ball bounces on the paddle's left face
+  const R = 8;
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // map the logical field onto whatever pixel box the tablet gives us
+  function setupDPR(){
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
+    canvas.width  = Math.round(rect.width  * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+  }
+  setupDPR();
+  addEventListener("resize", setupDPR);
+  addEventListener("orientationchange", () => setTimeout(setupDPR, 120));
+  if (window.ResizeObserver) new ResizeObserver(setupDPR).observe(canvas);
+
+  // ---- state ----
+  const BASE = 5.0, MAXSPD = 9.0, MAXANG = Math.PI / 3;
+  let paddleY = (fieldTop + fieldBottom - paddleH) / 2;
+  let balls = [], returns = 0, misses = 0, redHits = 0;
+  let running = false;
+  let elapsed = 0;
+  const TIME_LIMIT = 5 * 60 * 1000;   // 5:00 round
+  let gameOver = false;
+
+  // The round reports six opaque parameters. Three carry the real counts and
+  // three are decoys, so nothing on the result screen says which letter is
+  // which - the mapping lives only in the assessment sheet's scoring rules.
+  // Built once when the clock runs out so the screen and the clipboard agree.
+  const PARAM_KEYS = ["A","B","C","D","E","F"];
+  let params = null;
+  function rnd(lo, hi){ return lo + Math.floor(Math.random() * (hi - lo + 1)); }
+  function buildParams(){
+    params = {
+      A: redHits,
+      B: returns,
+      C: rnd(10, 80),
+      D: misses,
+      E: rnd(10, 80),
+      F: rnd(10, 80)
+    };
+  }
+
+  // hold-to-accelerate (very sensitive)
+  const BASE_V = 3.0, ACCEL_RATE = 7.5, MAX_MULT = 12.0;
+  let holdSign = 0, holdMs = 0;
+
+  // random spot in the LEFT QUARTER, aimed at the paddle
+  function spawnInto(b){
+    const a = (Math.random() * 2 - 1) * (25 * Math.PI / 180);
+    const quarter = (fieldRight - fieldLeft) / 4;
+    b.x = fieldLeft + R + Math.random() * (quarter - R);
+    b.y = fieldTop  + R + Math.random() * ((fieldBottom - R) - (fieldTop + R));
+    b.vx = Math.cos(a) * BASE;
+    b.vy = Math.sin(a) * BASE;
+    b.speed = BASE;
+    return b;
+  }
+  function makeBall(type){ return spawnInto({ type }); }
+
+  // the field: 2 red to dodge + 1 normal to return
+  function freshField(){ return [ makeBall("red"), makeBall("red"), makeBall("normal") ]; }
+  balls = freshField();
+
+  function reset(){
+    returns = 0; misses = 0; redHits = 0; elapsed = 0;
+    paddleY = (fieldTop + fieldBottom - paddleH) / 2;
+    balls = freshField();
+    holdSign = 0; holdMs = 0;
+    running = false; gameOver = false; params = null;
+    syncButtons();
+    ui();
+  }
+
+  // ---- control pads: the ONLY input ----
+  // left pad  -> paddle DOWN   |   right pad -> paddle UP
+  // (hands move horizontally, paddle moves vertically - the off-axis twist)
+  const padLeft  = document.getElementById("padLeft");
+  const padRight = document.getElementById("padRight");
+  const fillLeft = document.getElementById("fillLeft");
+  const fillRight= document.getElementById("fillRight");
+  const heldL = new Set(), heldR = new Set();
+
+  function bindPad(el, held){
+    const down = e => {
+      e.preventDefault();
+      held.add(e.pointerId);
+      try { el.setPointerCapture(e.pointerId); } catch(_){}
+      el.classList.add("on");
+    };
+    const up = e => {
+      held.delete(e.pointerId);
+      if (!held.size) el.classList.remove("on");
+    };
+    el.addEventListener("pointerdown", down);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+    el.addEventListener("lostpointercapture", up);
+    el.addEventListener("contextmenu", e => e.preventDefault());
+  }
+  bindPad(padLeft, heldL);
+  bindPad(padRight, heldR);
+  // safety: a pointer lost off-element shouldn't stick the paddle on
+  addEventListener("pointerup", e => { heldL.delete(e.pointerId); heldR.delete(e.pointerId);
+    if(!heldL.size) padLeft.classList.remove("on");
+    if(!heldR.size) padRight.classList.remove("on"); });
+  addEventListener("blur", () => { heldL.clear(); heldR.clear();
+    padLeft.classList.remove("on"); padRight.classList.remove("on"); });
+
+  function clampPaddle(){
+    const lo = fieldTop, hi = fieldBottom - paddleH;
+    if (paddleY < lo) paddleY = lo;
+    if (paddleY > hi) paddleY = hi;
+  }
+
+  function applyInput(f){
+    const dtMs = f * (1000/60);
+    // right(+) and left(-); pressing both cancels out
+    const sign = (heldR.size ? 1 : 0) - (heldL.size ? 1 : 0);
+
+    if (sign !== 0){
+      if (sign === holdSign) holdMs += dtMs;
+      else { holdSign = sign; holdMs = 0; }
+      const mult = Math.min(MAX_MULT, Math.exp(ACCEL_RATE * holdMs / 1000));
+      paddleY -= sign * BASE_V * mult * f;   // right -> UP. FLIP: change -= to +=
+      const pct = (mult - 1) / (MAX_MULT - 1) * 100;
+      (sign > 0 ? fillRight : fillLeft).style.height = pct + "%";
+      (sign > 0 ? fillLeft : fillRight).style.height = "0%";
+    } else {
+      holdSign = 0; holdMs = 0;
+      fillLeft.style.height = "0%";
+      fillRight.style.height = "0%";
+    }
+    clampPaddle();
+  }
+
+  // ---- physics (substepped so a fast ball can't tunnel the paddle) ----
+  function stepBall(f){
+    let dirty = false;
+    for (const b of balls){
+      const steps = Math.max(1, Math.ceil(b.speed * f / (R * 0.8)));
+      const sub = f / steps;
+      for (let i = 0; i < steps; i++){
+        b.x += b.vx * sub;
+        b.y += b.vy * sub;
+
+        if (b.y - R < fieldTop){    b.y = fieldTop + R;    b.vy =  Math.abs(b.vy); }
+        if (b.y + R > fieldBottom){ b.y = fieldBottom - R; b.vy = -Math.abs(b.vy); }
+        if (b.x - R < fieldLeft){   b.x = fieldLeft + R;   b.vx =  Math.abs(b.vx); }
+
+        // paddle contact
+        if (b.vx > 0 && b.x + R >= plane){
+          const top = paddleY, bot = paddleY + paddleH;
+          if (b.y >= top - R && b.y <= bot + R){
+            if (b.type === "red"){
+              // red on paddle: its own tally, never a miss
+              redHits++; dirty = true;
+              b.x = plane - R;
+              b.vx = -Math.abs(b.vx);
+            } else {
+              // normal: clean return, angle by contact point, nudge faster
+              b.x = plane - R;
+              const off = Math.max(-1, Math.min(1, (b.y - (paddleY + paddleH/2)) / (paddleH/2)));
+              b.speed = Math.min(b.speed * 1.035, MAXSPD);
+              const ang = off * MAXANG;
+              b.vx = -Math.cos(ang) * b.speed;
+              b.vy =  Math.sin(ang) * b.speed;
+              returns++; dirty = true;
+            }
+            continue;
+          }
+        }
+
+        // right wall: a normal ball reaching it is a Miss, then it bounces back in.
+        // speed is kept, nothing respawns.
+        if (b.x + R > fieldRight){
+          if (b.type !== "red"){ misses++; dirty = true; }
+          b.x = fieldRight - R;
+          b.vx = -Math.abs(b.vx);
+        }
+      }
+    }
+    if (dirty) ui();
+  }
+
+  // ---- rendering ----
+  function roundRect(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+  function drawGrid(){
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = T.grid;
+    ctx.beginPath();
+    for (let x = fieldLeft; x <= fieldRight; x += 32){ ctx.moveTo(x, fieldTop); ctx.lineTo(x, fieldBottom); }
+    for (let y = fieldTop; y <= fieldBottom; y += 32){ ctx.moveTo(fieldLeft, y); ctx.lineTo(fieldRight, y); }
+    ctx.stroke();
+  }
+  function drawWalls(){
+    ctx.strokeStyle = T.accent;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(fieldLeft, fieldTop);    ctx.lineTo(fieldRight, fieldTop);
+    ctx.moveTo(fieldLeft, fieldTop);    ctx.lineTo(fieldLeft, fieldBottom);
+    ctx.moveTo(fieldLeft, fieldBottom); ctx.lineTo(fieldRight, fieldBottom);
+    ctx.stroke();
+    ctx.strokeStyle = T.accentSoft;
+    ctx.lineWidth = 1;
+    const t = 10;
+    [[fieldLeft,fieldTop,1,1],[fieldRight,fieldTop,-1,1],[fieldLeft,fieldBottom,1,-1]].forEach(([x,y,sx,sy])=>{
+      ctx.beginPath();
+      ctx.moveTo(x+sx*t,y); ctx.lineTo(x,y); ctx.lineTo(x,y+sy*t); ctx.stroke();
+    });
+    // right wall: solid (it bounces) but red - a normal ball touching it costs a Miss
+    ctx.strokeStyle = T.red;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(fieldRight, fieldTop); ctx.lineTo(fieldRight, fieldBottom);
+    ctx.stroke();
+  }
+  function drawPaddle(){
+    const x = fieldRight - paddleW;
+    ctx.fillStyle = T.accent;
+    roundRect(x, paddleY, paddleW, paddleH, 5); ctx.fill();
+    ctx.fillStyle = T.paddleHi;
+    roundRect(x + 3, paddleY + 6, 3, paddleH - 12, 2); ctx.fill();
+  }
+  function drawBalls(){
+    for (const b of balls){
+      const col = b.type === "red" ? T.red : T.ret;
+      if (!reduceMotion){ ctx.shadowColor = col; ctx.shadowBlur = 9; }
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, R, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+  }
+  function drawOverlay(){
+    ctx.fillStyle = T.overlay;
+    ctx.fillRect(fieldLeft, fieldTop, fieldRight - fieldLeft, fieldBottom - fieldTop);
+    const cx = (fieldLeft + fieldRight)/2, cy = (fieldTop + fieldBottom)/2;
+    const started = (returns + misses + redHits) > 0 || elapsed > 0;
+    const done = gameOver && params;
+    ctx.textAlign = "center";
+
+    ctx.fillStyle = gameOver ? T.red : T.accent;
+    ctx.font = "700 30px ui-monospace, Menlo, Consolas, monospace";
+    ctx.fillText(gameOver ? "TIME UP" : (started ? "PAUSED" : "READY"),
+                 cx, done ? cy - 88 : cy - 4);
+
+    if (done){
+      const colX = [cx - 150, cx, cx + 150];
+      for (let i = 0; i < PARAM_KEYS.length; i++){
+        const k = PARAM_KEYS[i];
+        const x = colX[i % 3], y = cy - 40 + Math.floor(i / 3) * 62;
+        ctx.fillStyle = T.overlaySub;
+        ctx.font = "400 13px ui-monospace, Menlo, Consolas, monospace";
+        ctx.fillText(k, x, y);
+        ctx.fillStyle = T.accent;
+        ctx.font = "700 28px ui-monospace, Menlo, Consolas, monospace";
+        ctx.fillText(String(params[k]), x, y + 28);
+      }
+      ctx.fillStyle = T.overlaySub;
+      ctx.font = "400 14px ui-monospace, Menlo, Consolas, monospace";
+      ctx.fillText("tap START for a new round", cx, cy + 106);
+    } else {
+      ctx.fillStyle = T.overlaySub;
+      ctx.font = "400 14px ui-monospace, Menlo, Consolas, monospace";
+      ctx.fillText("tap " + (started ? "START to resume" : "START to begin"), cx, cy + 24);
+    }
+    ctx.textAlign = "start";
+  }
+  function render(){
+    ctx.clearRect(0,0,W,H);
+    drawGrid();
+    drawWalls();
+    drawPaddle();
+    drawBalls();
+    if (!running) drawOverlay();
+  }
+
+  // ---- HUD ----
+  const elReturns = document.getElementById("returns");
+  const elMisses   = document.getElementById("misses");
+  const elReds    = document.getElementById("reds");
+  const elTime    = document.getElementById("time");
+  function ui(){
+    elReturns.textContent = returns;
+    elMisses.textContent   = misses;
+    elReds.textContent    = redHits;
+  }
+  ui();
+
+  // ---- result capture ----
+  function pad2(n){ return String(n).padStart(2,"0"); }
+  function stamp(){
+    const d = new Date();
+    return d.getFullYear() + "-" + pad2(d.getMonth()+1) + "-" + pad2(d.getDate()) +
+           " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  }
+  function resultText(){
+    // pong-assess.html parses this. The counts line stays FIRST so the first six
+    // numbers in the text are A..F in order - that keeps the sheet's bare-number
+    // fallback correct even if the labelled patterns ever miss. Metadata below.
+    if (!params) return "";
+    return PARAM_KEYS.map(k => k + "=" + params[k]).join(" / ") + "\n" +
+           "PONG - " + fmtTime(TIME_LIMIT) + " round - " + stamp();
+  }
+  // navigator.clipboard needs a secure context; opened straight off disk it may
+  // be missing, so fall back to the old textarea trick rather than silently fail
+  function copyResult(){
+    const text = resultText();
+    const done = ok => {
+      copyBtn.textContent = ok ? "COPIED" : "COPY FAILED";
+      setTimeout(() => { copyBtn.textContent = "COPY RESULT"; }, 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(() => done(true), () => done(legacyCopy(text)));
+    } else {
+      done(legacyCopy(text));
+    }
+  }
+  function legacyCopy(text){
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly","");
+      ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch(_){ return false; }
+  }
+
+  // ---- system buttons ----
+  const startStop = document.getElementById("startStop");
+  const copyBtn   = document.getElementById("copyBtn");
+  copyBtn.addEventListener("click", copyResult);
+  // one place to keep both system buttons in step with the game state
+  function syncButtons(){
+    startStop.textContent = running ? "STOP" : "START";
+    document.body.classList.toggle("playing", running);
+    copyBtn.hidden = !gameOver;
+    if (!gameOver) copyBtn.textContent = "COPY RESULT";
+  }
+  startStop.addEventListener("click", () => {
+    if (gameOver) reset();          // round is done - START rolls a new one
+    running = !running;
+    syncButtons();
+  });
+  document.getElementById("resetBtn").addEventListener("click", reset);
+  syncButtons();
+
+  // ---- main loop ----
+  function fmtTime(ms){
+    const s = Math.floor(ms/1000);
+    return Math.floor(s/60) + ":" + String(s % 60).padStart(2,"0");
+  }
+  let lastShownSec = -1, last = performance.now();
+  function loop(now){
+    const dt = now - last; last = now;
+    const f = Math.min(3, dt / (1000/60));
+    applyInput(f);
+    if (running){
+      stepBall(f);
+      elapsed += dt;
+      if (elapsed >= TIME_LIMIT){ elapsed = TIME_LIMIT; running = false; gameOver = true; buildParams(); syncButtons(); }
+    }
+    render();
+    const sec = Math.floor(elapsed/1000);
+    if (sec !== lastShownSec){ elTime.textContent = fmtTime(elapsed); lastShownSec = sec; }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
