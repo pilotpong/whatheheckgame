@@ -110,7 +110,24 @@
             margin-bottom: 8px;
         }
 
-        .input-group input {
+        /* ช่องกรอกรหัส และช่องเลือกรอบเวลา วางเรียงกัน */
+        .input-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .input-field {
+            flex: 1.6 1 0;
+            min-width: 0;
+        }
+
+        .input-field.session-field {
+            flex: 1 1 0;
+        }
+
+        .input-group input,
+        .input-group select {
             width: 100%;
             padding: 14px 16px;
             font-size: 1.15rem;
@@ -124,15 +141,32 @@
             transition: all 0.2s ease;
         }
 
-        .input-group input:focus {
+        /* ช่องเลือกรอบเวลา */
+        .input-group select {
+            font-size: 1rem;
+            letter-spacing: 0.5px;
+            text-align: center;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 14px;
+            padding-right: 32px;
+        }
+
+        .input-group input:focus,
+        .input-group select:focus {
             outline: none;
             border-color: #2563eb;
-            background: white;
+            background-color: white;
             box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
         }
 
-        .input-group input:disabled {
-            background: #e2e8f0;
+        .input-group input:disabled,
+        .input-group select:disabled {
+            background-color: #e2e8f0;
             color: #94a3b8;
             cursor: not-allowed;
         }
@@ -247,8 +281,26 @@
     <h1>สุ่มห้องสัมภาษณ์</h1>
 
     <div class="input-group">
-        <label for="idInput">รหัสผู้เข้าสัมภาษณ์ (Interview ID)</label>
-        <input type="text" id="idInput" inputmode="numeric" autocomplete="off" placeholder="กรอกรหัส เช่น 20001">
+        <div class="input-row">
+            <div class="input-field">
+                <label for="idInput">รหัสผู้เข้าสัมภาษณ์ (Interview ID)</label>
+                <input type="text" id="idInput" inputmode="numeric" autocomplete="off" placeholder="กรอกรหัส เช่น 20001">
+            </div>
+            <div class="input-field session-field">
+                <label for="sessionSelect">รอบเวลา (Session)</label>
+                <select id="sessionSelect">
+                    <option value="">เลือกรอบ</option>
+                    <option value="09:00">09:00</option>
+                    <option value="09:45">09:45</option>
+                    <option value="10:30">10:30</option>
+                    <option value="11:15">11:15</option>
+                    <option value="13:00">13:00</option>
+                    <option value="13:45">13:45</option>
+                    <option value="14:30">14:30</option>
+                    <option value="15:15">15:15</option>
+                </select>
+            </div>
+        </div>
         <div class="input-hint" id="inputHint"></div>
     </div>
 
@@ -306,6 +358,7 @@
     const statusText = document.getElementById('statusText');
     const idInput = document.getElementById('idInput');
     const inputHint = document.getElementById('inputHint');
+    const sessionSelect = document.getElementById('sessionSelect');
 
     // ข้อความแสดงสถานะ
     const TEXT_OFF = "TG Pilot Recruitment";
@@ -366,6 +419,7 @@
         isAnimationRunning = true;
         drawBtn.disabled = true;
         idInput.disabled = true;
+        sessionSelect.disabled = true;
 
         // Animation เอฟเฟกต์ระหว่างสุ่ม (วิ่งตัวเลข 1-6)
         let counter = 0;
@@ -401,6 +455,7 @@
         isAnimationRunning = false;
         idInput.value = '';
         idInput.disabled = false;
+        sessionSelect.disabled = false;
 
         // ถ้าจับครบหมดทุกห้องแล้ว ให้ปิดปุ่มสุ่ม
         if (drawnList.length < MAX_PER_ROUND) {
@@ -408,6 +463,7 @@
             idInput.focus();
         } else {
             idInput.disabled = true;
+            sessionSelect.disabled = true;
         }
     }
 
@@ -436,6 +492,8 @@
             inputHint.innerText = '';
             idInput.value = '';
             idInput.disabled = false;
+            sessionSelect.value = '';
+            sessionSelect.disabled = false;
             idInput.focus();
         }
     }
