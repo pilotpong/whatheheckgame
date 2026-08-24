@@ -284,7 +284,7 @@
     returns = 0; misses = 0; redHits = 0; elapsed = 0;
     paddleY = (fieldTop + fieldBottom - paddleH) / 2;
     balls = freshField();
-    holdSign = 0; holdMs = 0;
+    releaseAll();
     running = false; gameOver = false; params = null;
     syncButtons();
     ui();
@@ -299,6 +299,25 @@
   const fillRight= document.getElementById("fillRight");
   const heldL = new Set(), heldR = new Set();
 
+  // Releasing a pad is the safety-critical half of this. A press that is never
+  // released leaves its sign latched, and the paddle drives into an edge and
+  // stays there for the rest of the round - the left pad pinning it at the
+  // bottom. So every way a pointer can possibly end is wired to release():
+  // the pad's own events, window-level ones in the capture phase (a cancel from
+  // a system gesture often does not target the pad at all), a move reported with
+  // no button still down, and the page losing focus or being hidden.
+  function release(id){
+    heldL.delete(id); heldR.delete(id);
+    if (!heldL.size) padLeft.classList.remove("on");
+    if (!heldR.size) padRight.classList.remove("on");
+  }
+  function releaseAll(){
+    heldL.clear(); heldR.clear();
+    padLeft.classList.remove("on"); padRight.classList.remove("on");
+    holdSign = 0; holdMs = 0;
+    fillLeft.style.height = "0%"; fillRight.style.height = "0%";
+  }
+
   function bindPad(el, held){
     const down = e => {
       e.preventDefault();
@@ -306,10 +325,7 @@
       try { el.setPointerCapture(e.pointerId); } catch(_){}
       el.classList.add("on");
     };
-    const up = e => {
-      held.delete(e.pointerId);
-      if (!held.size) el.classList.remove("on");
-    };
+    const up = e => release(e.pointerId);
     el.addEventListener("pointerdown", down);
     el.addEventListener("pointerup", up);
     el.addEventListener("pointercancel", up);
@@ -318,12 +334,17 @@
   }
   bindPad(padLeft, heldL);
   bindPad(padRight, heldR);
-  // safety: a pointer lost off-element shouldn't stick the paddle on
-  addEventListener("pointerup", e => { heldL.delete(e.pointerId); heldR.delete(e.pointerId);
-    if(!heldL.size) padLeft.classList.remove("on");
-    if(!heldR.size) padRight.classList.remove("on"); });
-  addEventListener("blur", () => { heldL.clear(); heldR.clear();
-    padLeft.classList.remove("on"); padRight.classList.remove("on"); });
+
+  // capture phase, so these still land if anything stops propagation on the way up
+  ["pointerup","pointercancel"].forEach(type => {
+    addEventListener(type, e => release(e.pointerId), true);
+  });
+  // a move with no button down means the press already ended somewhere we never
+  // heard about - the case that survives every listener above
+  addEventListener("pointermove", e => { if (e.buttons === 0) release(e.pointerId); }, true);
+  addEventListener("blur", releaseAll);
+  addEventListener("pagehide", releaseAll);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) releaseAll(); });
 
   function clampPaddle(){
     const lo = fieldTop, hi = fieldBottom - paddleH;
@@ -591,7 +612,7 @@
     if (running){
       stepBall(f);
       elapsed += dt;
-      if (elapsed >= TIME_LIMIT){ elapsed = TIME_LIMIT; running = false; gameOver = true; buildParams(); syncButtons(); }
+      if (elapsed >= TIME_LIMIT){ elapsed = TIME_LIMIT; running = false; gameOver = true; buildParams(); releaseAll(); syncButtons(); }
     }
     render();
     const sec = Math.floor(elapsed/1000);
