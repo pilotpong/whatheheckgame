@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบสุ่มจับฉลากห้องสัมภาษณ์</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Kanit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 480px;
+            width: 100%;
+        }
+
+        /* ส่วนควบคุมและแถบข้อความเคลื่อนไหว */
+        .secret-control {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            gap: 12px;
+            padding: 4px 0;
+        }
+
+        /* กล่องครอบข้อความวิ่ง */
+        .marquee-container {
+            flex: 1;
+            overflow: hidden;
+            white-space: nowrap;
+            position: relative;
+            background: #f8fafc;
+            padding: 6px 0;
+            border-radius: 4px;
+            border: 1px solid #f1f5f9;
+        }
+
+        /* ข้อความวิ่งจากซ้ายไปขวา */
+        .status-text {
+            display: inline-block;
+            font-size: 0.85rem;
+            color: #64748b;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            animation: marqueeLeftToRight 8s linear infinite;
+        }
+
+        @keyframes marqueeLeftToRight {
+            0% {
+                transform: translateX(-100%);
+            }
+            100% {
+                transform: translateX(100%);
+            }
+        }
+
+        /* ปุ่ม SP TG 2026 */
+        .secret-toggle {
+            background: none;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 5px 10px;
+            font-size: 0.75rem;
+            color: #94a3b8;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .secret-toggle:hover {
+            background: #f8fafc;
+            color: #64748b;
+        }
+
+        h1 {
+            color: #1a1a1a;
+            margin-bottom: 24px;
+            font-size: 1.8rem;
+        }
+
+        /* ช่องกรอกรหัสผู้เข้าสัมภาษณ์ */
+        .input-group {
+            text-align: left;
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 0.9rem;
+            color: #64748b;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        /* ช่องกรอกรหัส และช่องเลือกรอบเวลา วางเรียงกัน */
+        .input-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .input-field {
+            flex: 1.6 1 0;
+            min-width: 0;
+        }
+
+        .input-field.session-field {
+            flex: 1 1 0;
+        }
+
+        .input-group input,
+        .input-group select {
+            width: 100%;
+            padding: 14px 16px;
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: #0f172a;
+            text-align: center;
+            letter-spacing: 1px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: #f8fafc;
+            transition: all 0.2s ease;
+        }
+
+        /* ช่องเลือกรอบเวลา */
+        .input-group select {
+            font-size: 1rem;
+            letter-spacing: 0.5px;
+            text-align: center;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 14px;
+            padding-right: 32px;
+        }
+
+        .input-group input:focus,
+        .input-group select:focus {
+            outline: none;
+            border-color: #2563eb;
+            background-color: white;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+
+        .input-group input:disabled,
+        .input-group select:disabled {
+            background-color: #e2e8f0;
+            color: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        /* ข้อความแจ้งเตือนใต้ช่องกรอก */
+        .input-hint {
+            min-height: 18px;
+            margin-top: 6px;
+            font-size: 0.8rem;
+            color: #ef4444;
+            font-weight: 500;
+        }
+
+        /* กล่องแสดงผลตัวเลข */
+        .display-box {
+            background: #1e293b;
+            color: #38bdf8;
+            font-size: 6rem;
+            font-weight: bold;
+            height: 160px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 24px;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
+            transition: color 0.3s ease;
+        }
+
+        /* ปุ่มสุ่ม */
+        .btn-draw {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            font-size: 1.25rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+
+        .btn-draw:hover:not(:disabled) {
+            background: #1d4ed8;
+            transform: translateY(-1px);
+        }
+
+        .btn-draw:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* รายการห้องที่สุ่มไปแล้ว */
+        .history {
+            margin-top: 30px;
+            text-align: left;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 20px;
+        }
+
+        .history h3 {
+            font-size: 1rem;
+            color: #64748b;
+            margin-bottom: 12px;
+        }
+
+        .history-list {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .history-item {
+            background: #e2e8f0;
+            color: #334155;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        /* ปุ่มรีเซ็ตระบบ */
+        .btn-reset {
+            margin-top: 20px;
+            background: transparent;
+            color: #64748b;
+            border: none;
+            text-decoration: underline;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .btn-reset:hover {
+            color: #0f172a;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- แถบข้อความวิ่ง และปุ่มสถานะ -->
+    <div class="secret-control">
+        <div class="marquee-container">
+            <span class="status-text" id="statusText">TG Pilot Recruitment</span>
+        </div>
+        <button class="secret-toggle" id="secretBtn" onclick="toggleSecretMode()">SP TG 2026</button>
+    </div>
+
+    <h1>สุ่มห้องสัมภาษณ์</h1>
+
+    <!-- ช่องกรอกข้อมูล (แสดงผลอย่างเดียว ไม่มีผลต่อการสุ่ม) -->
+    <div class="input-group">
+        <div class="input-row">
+            <div class="input-field">
+                <label for="idInput">รหัสผู้เข้าสัมภาษณ์ (Interview ID)</label>
+                <input type="text" id="idInput" inputmode="numeric" autocomplete="off" placeholder="กรอกรหัส เช่น 10001">
+            </div>
+            <div class="input-field session-field">
+                <label for="sessionSelect">รอบเวลา (Session)</label>
+                <select id="sessionSelect">
+                    <option value="">เลือกรอบ</option>
+                    <option value="09:00">09:00</option>
+                    <option value="09:45">09:45</option>
+                    <option value="10:30">10:30</option>
+                    <option value="11:15">11:15</option>
+                    <option value="13:00">13:00</option>
+                    <option value="13:45">13:45</option>
+                    <option value="14:30">14:30</option>
+                    <option value="15:15">15:15</option>
+                </select>
+            </div>
+        </div>
+        <div class="input-hint" id="inputHint"></div>
+    </div>
+
+    <div class="display-box" id="display">?</div>
+
+    <button class="btn-draw" id="drawBtn" onclick="startDraw()">กดเพื่อสุ่มห้อง</button>
+
+    <div class="history">
+        <h3>ห้องที่ถูกเลือกแล้ว:</h3>
+        <div class="history-list" id="historyList">
+            <!-- รายการห้องจะถูกเพิ่มที่นี่ -->
+        </div>
+    </div>
+
+    <button class="btn-reset" onclick="resetSystem()">เริ่มต้นรอบใหม่</button>
+</div>
+
+<script>
+    // ---------------------------------------------------------------
+    // ระบบสุ่มจริง (Real Random) : ห้อง 1-6 มีโอกาสเท่ากันทุกห้อง
+    // ไม่มีการล็อกผลลัพธ์ใด ๆ ทั้งสิ้น
+    // ---------------------------------------------------------------
+
+    const TOTAL_ROOMS = 6;
+
+    let availableRooms = [1, 2, 3, 4, 5, 6]; // ห้องที่ยังไม่ถูกสุ่ม
+    let drawnRooms = [];                     // ห้องที่ถูกสุ่มไปแล้ว
+    let isAnimationRunning = false;
+
+    const display = document.getElementById('display');
+    const drawBtn = document.getElementById('drawBtn');
+    const historyList = document.getElementById('historyList');
+    const statusText = document.getElementById('statusText');
+
+    // ข้อความแสดงสถานะ
+    const TEXT_OFF = "TG Pilot Recruitment";
+    const TEXT_ON = "TG Pilot Recruitment.";
+    let isMarkerOn = false;
+
+    // สุ่มเลข 0 ถึง max-1 แบบไม่เอนเอียง (ใช้ตัวสุ่มของเบราว์เซอร์)
+    function randomIndex(max) {
+        if (window.crypto && window.crypto.getRandomValues) {
+            const limit = Math.floor(4294967296 / max) * max;
+            const buf = new Uint32Array(1);
+            let value;
+            do {
+                window.crypto.getRandomValues(buf);
+                value = buf[0];
+            } while (value >= limit); // ตัดค่าที่ทำให้การกระจายไม่เท่ากันทิ้ง
+            return value % max;
+        }
+        return Math.floor(Math.random() * max);
+    }
+
+    // ปุ่มสลับข้อความสถานะ (ไม่มีผลต่อผลการสุ่ม)
+    function toggleSecretMode() {
+        if (isAnimationRunning) return;
+        isMarkerOn = !isMarkerOn;
+        statusText.innerText = isMarkerOn ? TEXT_ON : TEXT_OFF;
+    }
+
+    // ฟังก์ชันกดสุ่ม
+    function startDraw() {
+        if (drawnRooms.length >= TOTAL_ROOMS) {
+            alert("จับฉลากครบทุกห้องแล้ว กรุณากดเริ่มต้นรอบใหม่");
+            return;
+        }
+
+        isAnimationRunning = true;
+        drawBtn.disabled = true;
+
+        // Animation เอฟเฟกต์ระหว่างสุ่ม (วิ่งตัวเลข 1-6)
+        let counter = 0;
+        const animationInterval = setInterval(() => {
+            display.innerText = randomIndex(TOTAL_ROOMS) + 1;
+            counter++;
+
+            if (counter > 20) { // ระยะเวลาเอฟเฟกต์ (~2 วินาที)
+                clearInterval(animationInterval);
+                finalizeDraw();
+            }
+        }, 100);
+    }
+
+    // สรุปผลการสุ่ม : หยิบจากห้องที่เหลือแบบสุ่มจริง
+    function finalizeDraw() {
+        const pick = randomIndex(availableRooms.length);
+        const selectedRoom = availableRooms[pick];
+
+        // นำห้องที่ถูกสุ่มออกจากกองที่เหลือ
+        availableRooms.splice(pick, 1);
+
+        // บันทึกและแสดงผล
+        drawnRooms.push(selectedRoom);
+        display.innerText = selectedRoom;
+
+        updateHistory();
+
+        isAnimationRunning = false;
+
+        // ถ้าจับครบหมดทุกห้องแล้ว ให้ปิดปุ่มสุ่ม
+        if (drawnRooms.length < TOTAL_ROOMS) {
+            drawBtn.disabled = false;
+        }
+    }
+
+    // อัปเดตแสดงประวัติห้องที่ถูกสุ่มไปแล้ว
+    function updateHistory() {
+        historyList.innerHTML = '';
+        drawnRooms.forEach(room => {
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            item.innerText = `ห้อง ${room}`;
+            historyList.appendChild(item);
+        });
+    }
+
+    // รีเซ็ตระบบ
+    function resetSystem() {
+        if (confirm("ต้องการรีเซ็ตเพื่อเริ่มจับฉลากรอบใหม่หรือไม่?")) {
+            availableRooms = [1, 2, 3, 4, 5, 6];
+            drawnRooms = [];
+            isAnimationRunning = false;
+            isMarkerOn = false;
+
+            statusText.innerText = TEXT_OFF;
+            display.innerText = '?';
+            drawBtn.disabled = false;
+            historyList.innerHTML = '';
+        }
+    }
+</script>
+
+</body>
+</html>
